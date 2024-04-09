@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chargement de modèles 3D avec Three.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        function init() {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = -0.6;
+            camera.position.x = 0.4;
+            camera.position.y = -0.04;
+            camera.rotation.y = -30;
+            camera.rotation.z = 0;
+            camera.rotation.x = 0.1;
+
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Supprimer la lumière ambiante par défaut
+            scene.remove(scene.children.find(child => child instanceof THREE.AmbientLight));
+
+            // Créer et ajouter votre propre lumière
+            const myDirectionalLight = new THREE.DirectionalLight(0xffffff, 1); // Couleur blanche, puissance 1
+            myDirectionalLight.position.set(1, 1, 1); // Position de la lumière (x, y, z)
+            scene.add(myDirectionalLight);
+
+            const initialRotation = new THREE.Euler(Math.PI / 1.3, 1.9, -2.2); // Rotation initiale commune
+
+            const models = [
+                { file: '../3d/right.gltf', position: new THREE.Vector3(0, 0, 0) },
+                { file: '../3d/center.gltf', position: new THREE.Vector3(0, 0, 0) },
+                { file: '../3d/left.gltf', position: new THREE.Vector3(0, 0, 0) },
+                { file: '../3d/top.gltf', position: new THREE.Vector3(0, 0, 0) }
+            ];
+
+            const loader = new THREE.GLTFLoader();
+            const initialPositions = {}; // Object to store initial positions for each model
+
+            models.forEach(modelInfo => {
+                loader.load(modelInfo.file, function(gltf) {
+                    const model = gltf.scene;
+                    model.position.copy(modelInfo.position);
+                    model.rotation.copy(initialRotation);
+                    scene.add(model);
+
+                    // Store the initial position of the model using its file name as key
+                    initialPositions[modelInfo.file] = model.position.clone();
+
+                    model.traverse(function(child) {
+                        if (child.isMesh) {
+                            child.userData = {
+                                clickable: true,
+                                modelName: modelInfo.file,
+                                targetPosition: new THREE.Vector3(0, 0, -5)
+                            };
+                        }
+                    });
+                });
+            });
+
+            window.addEventListener('click', onClick, false);
+
+            function onClick(event) {
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2();
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                if (intersects.length > 0) {
+                    const object = intersects[0].object;
+                    if (object.userData.clickable) {
+                        animateModel(object);
+                    }
+                }
+            }
+
+            function animateModel(object) {
+                const duration = 400;
+                const parentModel = object.parent;
+                const startPosition = initialPositions[object.userData.modelName]; // Use the stored initial position for this model
+                const targetPosition = object.userData.targetPosition;
+                let startTime = null;
+                let direction = 1;
+
+                function animateObject(timestamp) {
+                    if (!startTime) startTime = timestamp;
+                    const progress = timestamp - startTime;
+                    let t = Math.min(progress / duration, 1);
+                    t = Math.sin(t * Math.PI * 0.5); 
+
+                    const newPosition = new THREE.Vector3().lerpVectors(
+                        startPosition,
+                        direction === 1 ? targetPosition : startPosition,
+                        t
+                    );
+                    parentModel.position.copy(newPosition);
+
+                    if (t >= 1) {
+                        direction *= -1;
+                        startTime = timestamp;
+                        if (direction === 1) {
+                            return;
+                        }
+                    }
+
+                    requestAnimationFrame(animateObject);
+                }
+
+                requestAnimationFrame(animateObject);
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+            }
+
+            animate();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
